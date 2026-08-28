@@ -1,0 +1,84 @@
+name: module-ci
+
+# CI di UN singolo modulo go-core, richiamabile dal repo del modulo.
+#
+# È un reusable workflow (`workflow_call`) e non un file da copiare nei sette repo: il caller è di
+# sei righe, la logica sta qui. Sette copie sarebbero sette copie che divergono — l'errore già
+# visto con le due copie di `go-core-sync.sh`, dove quella priva di go-core-kafka era proprio
+# quella installata.
+#
+# Cosa aggiunge rispetto a `drift.yml` dell'ombrello: gira nel repo del modulo, **a ogni push**,
+# quindi toglie la latenza di 24h della schedulata. E ci gira senza `go.work` per costruzione —
+# un checkout del solo modulo non ha il workspace — quindi è il controllo standalone fatto nel
+# momento in cui la deriva verrebbe introdotta, invece che la notte dopo.
+
+on:
+  workflow_call:
+    inputs:
+      go-version-file:
+        description: File da cui dedurre la versione di Go.
+        type: string
+        default: go.mod
+      cgo:
+        description: >-
+          CGO_ENABLED. go-core-kafka è su confluent-kafka-go (CGo su librdkafka) e richiede "1".
+        type: string
+        default: '1'
+
+permissions:
+  contents: read
+
+jobs:
+  verifica:
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: ${{ inputs.cgo }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # il gating del linter sul codice nuovo ha bisogno della storia
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ inputs.go-version-file }}
+          cache-dependency-path: go.sum
+
+      # Nessun GOWORK=off: qui il workspace non c'è proprio. È il punto — questa build vede
+      # esattamente ciò che vede un consumatore esterno che fa `go get` del modulo.
+      - name: build
+        run: go build ./...
+
+      - name: vet
+        run: go vet ./...
+
+      - name: gofmt
+        run: |
+          fmt=$(gofmt -l .)
+          if [ -n "$fmt" ]; then
+            echo "file non formattati:"; echo "$fmt"; exit 1
+          fi
+
+      # -count=2 disabilita la cache dei test ed esegue ogni test due volte nello stesso processo:
+      # è ciò che smaschera lo stato globale fra un test e l'altro (§3.2 dell'analisi — il registro
+      # DI di go-core-app non veniva svuotato, e il registro dei driver di database/sql è globale).
+      - name: test (ripetibilità)
+        run: go test -race -count=2 ./...
+
+      # Compilati con la toolchain di setup-go, non scaricati precompilati: un binario precompilato
+      # è precisamente come ci si ritrova con strumenti più vecchi dei sorgenti (§3.3).
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      # Solo sul codice nuovo: i moduli hanno un debito di lint pregresso (§3.3) e bloccare tutto
+      # renderebbe rossa la CI dal primo giorno. Qui non c'è il .golangci.yml dell'ombrello, quindi
+      # valgono i default — che coincidono con il set standard configurato lì.
+      - name: golangci-lint (codice nuovo)
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            golangci-lint run --new-from-merge-base=origin/${{ github.base_ref }} ./...
+          else
+            golangci-lint run --new-from-rev=HEAD~1 ./...
+          fi
