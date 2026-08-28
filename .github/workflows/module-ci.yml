@@ -3,14 +3,13 @@ name: module-ci
 # CI di UN singolo modulo go-core, richiamabile dal repo del modulo.
 #
 # È un reusable workflow (`workflow_call`) e non un file da copiare nei sette repo: il caller è di
-# sei righe, la logica sta qui. Sette copie sarebbero sette copie che divergono — l'errore già
-# visto con le due copie di `go-core-sync.sh`, dove quella priva di go-core-kafka era proprio
-# quella installata.
+# sei righe, la logica sta qui. Sette copie sarebbero sette copie che divergono, e la copia che
+# diverge in silenzio è sempre quella che qualcuno sta usando davvero.
 #
-# Cosa aggiunge rispetto a `drift.yml` dell'ombrello: gira nel repo del modulo, **a ogni push**,
-# quindi toglie la latenza di 24h della schedulata. E ci gira senza `go.work` per costruzione —
-# un checkout del solo modulo non ha il workspace — quindi è il controllo standalone fatto nel
-# momento in cui la deriva verrebbe introdotta, invece che la notte dopo.
+# Le librerie si sviluppano insieme in un workspace Go, dove ogni build usa i sorgenti locali.
+# Questa CI gira nel repo della singola libreria, quindi **senza `go.work` per costruzione**: è la
+# verifica che il modulo sia consumabile da solo — ciò che vede chi ne fa `go get` — eseguita nel
+# momento in cui una discrepanza fra codice e `go.mod` verrebbe introdotta.
 
 on:
   workflow_call:
@@ -59,21 +58,22 @@ jobs:
           fi
 
       # -count=2 disabilita la cache dei test ed esegue ogni test due volte nello stesso processo:
-      # è ciò che smaschera lo stato globale fra un test e l'altro (§3.2 dell'analisi — il registro
-      # DI di go-core-app non veniva svuotato, e il registro dei driver di database/sql è globale).
+      # è ciò che smaschera lo stato globale che sopravvive fra un test e l'altro: un registro di
+      # package, un driver registrato in database/sql, una fx.App che non rilascia le registrazioni.
       - name: test (ripetibilità)
         run: go test -race -count=2 ./...
 
       # Compilati con la toolchain di setup-go, non scaricati precompilati: un binario precompilato
-      # è precisamente come ci si ritrova con strumenti più vecchi dei sorgenti (§3.3).
+      # è precisamente come ci si ritrova con strumenti più vecchi dei sorgenti.
       - name: govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
-      # Solo sul codice nuovo: i moduli hanno un debito di lint pregresso (§3.3) e bloccare tutto
-      # renderebbe rossa la CI dal primo giorno. Qui non c'è il .golangci.yml dell'ombrello, quindi
-      # valgono i default — che coincidono con il set standard configurato lì.
+      # Solo sul codice nuovo: le librerie hanno un debito di lint pregresso e bloccare tutto
+      # renderebbe rossa la CI dal primo giorno — una CI rossa dal primo giorno viene ignorata.
+      # Senza un .golangci.yml nel repo valgono i default, cioè il set standard
+      # (errcheck, govet, ineffassign, staticcheck, unused).
       - name: golangci-lint (codice nuovo)
         run: |
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
