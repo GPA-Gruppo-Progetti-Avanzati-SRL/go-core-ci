@@ -1,0 +1,31 @@
+# Configurazione condivisa delle librerie go-core.
+#
+# Vive qui in copia unica e la CI la passa a golangci-lint con `-c`: una copia per libreria sarebbe
+# una copia da tenere allineata, e la copia che diverge in silenzio è sempre quella in uso.
+#
+# In locale, chi lavora nel workspace la trova risalendo l'albero; chi lavora su una libreria clonata
+# da sola può passarla esplicitamente, oppure lasciare i default — che coincidono con
+# `default: standard` qui sotto.
+
+version: "2"
+
+linters:
+  # Set standard: errcheck, govet, ineffassign, staticcheck, unused.
+  # Deliberatamente NON allargato: il debito pregresso è di una trentina di rilievi e
+  # aggiungere linter prima di averlo azzerato sposta solo il traguardo.
+  default: standard
+
+  exclusions:
+    generated: lax
+    rules:
+      # I file *_test.go usano di proposito valori di ritorno ignorati negli helper di setup.
+      - path: _test\.go
+        linters: [errcheck]
+
+      # `unused` non vede l'uso attraverso il grafo fx: un costruttore raggiunto solo da
+      # core.Provide/ProvideAs sembra morto. Va valutato a mano, non silenziato in massa —
+      # quindi qui NON c'è un'esclusione per fx, ed è intenzionale.
+
+formatters:
+  enable:
+    - gofmt

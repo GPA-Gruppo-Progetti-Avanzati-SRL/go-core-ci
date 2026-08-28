@@ -65,20 +65,31 @@ jobs:
 
       # Compilati con la toolchain di setup-go, non scaricati precompilati: un binario precompilato
       # è precisamente come ci si ritrova con strumenti più vecchi dei sorgenti.
+      #
+      # Sulla schedulata questo è il passo che conta: una CVE nuova compare senza che il codice
+      # cambi, quindi una CI che gira solo sui commit non la vedrebbe mai.
       - name: govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
+      # La configurazione del linter vive in questo stesso repo, in copia unica: la libreria che
+      # viene analizzata non la contiene, quindi va portata qui e passata con -c. Senza, golangci
+      # userebbe i default e la configurazione condivisa non avrebbe alcun effetto in CI.
+      - name: configurazione condivisa del linter
+        uses: actions/checkout@v4
+        with:
+          repository: GPA-Gruppo-Progetti-Avanzati-SRL/go-core-ci
+          ref: main
+          path: .ci-shared
+
       # Solo sul codice nuovo: le librerie hanno un debito di lint pregresso e bloccare tutto
       # renderebbe rossa la CI dal primo giorno — una CI rossa dal primo giorno viene ignorata.
-      # Senza un .golangci.yml nel repo valgono i default, cioè il set standard
-      # (errcheck, govet, ineffassign, staticcheck, unused).
       - name: golangci-lint (codice nuovo)
         run: |
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            golangci-lint run --new-from-merge-base=origin/${{ github.base_ref }} ./...
+            golangci-lint run -c .ci-shared/.golangci.yml --new-from-merge-base=origin/${{ github.base_ref }} ./...
           else
-            golangci-lint run --new-from-rev=HEAD~1 ./...
+            golangci-lint run -c .ci-shared/.golangci.yml --new-from-rev=HEAD~1 ./...
           fi

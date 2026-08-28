@@ -3,9 +3,13 @@
 CI condivisa delle librerie **go-core**: `go-core-app`, `go-core-api`, `go-core-mongo`,
 `go-core-sql`, `go-core-redis`, `go-core-batch`, `go-core-kafka`.
 
-Un file solo, `.github/workflows/module-ci.yml`: un **reusable workflow** che ciascuna libreria
-richiama con un caller di sei righe, così la ricetta di build esiste in copia unica invece che
-ripetuta sette volte.
+Due file:
+
+- `.github/workflows/module-ci.yml` — un **reusable workflow** che ciascuna libreria richiama con un
+  caller di poche righe, così la ricetta di build esiste in copia unica invece che ripetuta sette volte;
+- `.golangci.yml` — la configurazione condivisa del linter, che il workflow passa a `golangci-lint`
+  con `-c`. Sta qui e non nelle librerie per la stessa ragione: una copia per libreria sarebbe una
+  copia da tenere allineata.
 
 ## Uso
 
