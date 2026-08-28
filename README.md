@@ -20,7 +20,7 @@ name: ci
 
 on:
   push:
-    branches: [main]      # oppure master
+    branches: [master]
   pull_request:
   workflow_dispatch:
 
@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   ci:
-    uses: GPA-Gruppo-Progetti-Avanzati-SRL/go-core-ci/.github/workflows/module-ci.yml@main
+    uses: GPA-Gruppo-Progetti-Avanzati-SRL/go-core-ci/.github/workflows/module-ci.yml@master
 ```
 
 Input opzionali:

@@ -80,7 +80,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: GPA-Gruppo-Progetti-Avanzati-SRL/go-core-ci
-          ref: main
+          ref: master
           path: .ci-shared
 
       # Solo sul codice nuovo: le librerie hanno un debito di lint pregresso e bloccare tutto
