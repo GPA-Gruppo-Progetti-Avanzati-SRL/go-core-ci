@@ -22,6 +22,16 @@ linters:
       - path: _test\.go
         linters: [errcheck]
 
+      # QF1008 ("could remove embedded field from selector") chiede di scrivere `t.commit(ctx)`
+      # dove il codice scrive `t.txn.commit(ctx)`. In go-core-kafka quel qualificatore c'è apposta:
+      # è scritto SOLO dove il metodo promosso ha lo stesso nome del metodo che lo chiama — cioè
+      # `func (t *txProducer) Commit(ctx) error { return t.txn.commit(ctx) }` — e toglierlo lascia
+      # una riga a un carattere di distanza dalla ricorsione infinita, oltre a nascondere che il
+      # commit è quello della transazione nuda e non del wrapper. È una quickfix di stile, non un
+      # difetto: la leggibilità la decide chi scrive, non il linter.
+      - linters: [staticcheck]
+        text: "QF1008"
+
       # `unused` non vede l'uso attraverso il grafo fx: un costruttore raggiunto solo da
       # core.Provide/ProvideAs sembra morto. Va valutato a mano, non silenziato in massa —
       # quindi qui NON c'è un'esclusione per fx, ed è intenzionale.
