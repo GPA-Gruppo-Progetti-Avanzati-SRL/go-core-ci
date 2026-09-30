@@ -23,6 +23,12 @@ on:
           CGO_ENABLED. go-core-kafka è su confluent-kafka-go (CGo su librdkafka) e richiede "1".
         type: string
         default: '1'
+      test-tags:
+        description: >-
+          Build tag dei test di integrazione da eseguire in più (es. "mockcluster" per go-core-kafka).
+          Vuoto = solo i test di default.
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -32,6 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CGO_ENABLED: ${{ inputs.cgo }}
+      TEST_TAGS: ${{ inputs.test-tags }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,8 +54,10 @@ jobs:
       - name: build
         run: go build ./...
 
+      # Coi tag dei test di integrazione: i file dietro un build tag non li compila nessun altro passo,
+      # e un test che non compila è un test che non gira senza che nessuno se ne accorga.
       - name: vet
-        run: go vet ./...
+        run: go vet ${TEST_TAGS:+-tags "$TEST_TAGS"} ./...
 
       - name: gofmt
         run: |
@@ -62,6 +71,13 @@ jobs:
       # package, un driver registrato in database/sql, una fx.App che non rilascia le registrazioni.
       - name: test (ripetibilità)
         run: go test -race -count=2 ./...
+
+      # Una volta sola e non due: sono test di integrazione in-process (go-core-kafka: rebalance ed EOS
+      # su un cluster simulato, ~8 minuti con -race), e la ripetibilità l'ha già verificata il passo sopra.
+      - name: test di integrazione (build tag)
+        if: ${{ inputs.test-tags != '' }}
+        timeout-minutes: 30
+        run: go test -race -count=1 -tags "$TEST_TAGS" ./...
 
       # Compilati con la toolchain di setup-go, non scaricati precompilati: un binario precompilato
       # è precisamente come ci si ritrova con strumenti più vecchi dei sorgenti.
