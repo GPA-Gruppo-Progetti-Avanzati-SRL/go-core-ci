@@ -38,6 +38,13 @@ Input opzionali:
 |---|---|---|
 | `go-version-file` | `go.mod` | file da cui `setup-go` deduce la versione di Go |
 | `cgo` | `"1"` | `CGO_ENABLED`. `go-core-kafka` è su confluent-kafka-go (CGo su librdkafka) e lo richiede |
+| `test-tags` | `""` | build tag dei test di integrazione eseguiti in un passo a sé (`-count=1`): `go-core-kafka` passa `mockcluster` (rebalance ed EOS su cluster simulato, ~8 minuti con `-race`) |
+| `postgres` | `false` | avvia PostgreSQL 16 ed esporta `PG_URL`: la suite degli store di claiming di `go-core-batch` |
+| `mongo` | `false` | avvia MongoDB 7 **in replica set** (le transazioni lo richiedono) ed esporta `MONGO_URL`: `go-core-mongo`, `go-core-batch`, `go-core-locker` |
+
+I test che leggono `PG_URL`/`MONGO_URL` si saltano da soli senza la variabile: in locale si lanciano
+contro un container, in CI li accende il caller. I due database sono container avviati in uno step e
+non `services:`, perché Mongo va lanciato con `--replSet` e un service container non accetta argomenti.
 
 Il workflow non riceve né usa `secrets`.
 

@@ -23,6 +23,18 @@ on:
           CGO_ENABLED. go-core-kafka è su confluent-kafka-go (CGo su librdkafka) e richiede "1".
         type: string
         default: '1'
+      postgres:
+        description: >-
+          Avvia un PostgreSQL ed esporta PG_URL, per i test che hanno bisogno di un database vero
+          (go-core-batch: la suite degli store di claiming). Senza, quei test sono saltati.
+        type: boolean
+        default: false
+      mongo:
+        description: >-
+          Avvia un MongoDB in replica set (le transazioni lo richiedono) ed esporta MONGO_URL
+          (go-core-mongo, go-core-batch, go-core-locker). Senza, quei test sono saltati.
+        type: boolean
+        default: false
       test-tags:
         description: >-
           Build tag dei test di integrazione da eseguire in più (es. "mockcluster" per go-core-kafka).
@@ -48,6 +60,27 @@ jobs:
         with:
           go-version-file: ${{ inputs.go-version-file }}
           cache-dependency-path: go.sum
+
+      # Database per i test gated: un test che salta senza PG_URL/MONGO_URL in CI non gira mai, e
+      # sono proprio i test di claiming e di transazione — il codice che un fake non verifica.
+      # Container avviati a mano e non come `services:`, perché Mongo va lanciato con --replSet e
+      # un service container non accetta argomenti di comando.
+      - name: PostgreSQL
+        if: ${{ inputs.postgres }}
+        run: |
+          docker run -d --name ci-pg -p 5432:5432 -e POSTGRES_PASSWORD=pg -e POSTGRES_DB=ci postgres:16-alpine
+          for i in $(seq 1 30); do docker exec ci-pg pg_isready -U postgres -d ci >/dev/null 2>&1 && break; sleep 1; done
+          docker exec ci-pg pg_isready -U postgres -d ci
+          echo "PG_URL=postgres://postgres:pg@localhost:5432/ci?sslmode=disable" >> "$GITHUB_ENV"
+
+      - name: MongoDB (replica set)
+        if: ${{ inputs.mongo }}
+        run: |
+          docker run -d --name ci-mongo -p 27017:27017 mongo:7 --replSet rs0 --bind_ip_all
+          for i in $(seq 1 30); do docker exec ci-mongo mongosh --quiet --eval 'db.runCommand({ping:1}).ok' >/dev/null 2>&1 && break; sleep 1; done
+          docker exec ci-mongo mongosh --quiet --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"localhost:27017"}]})'
+          for i in $(seq 1 30); do [ "$(docker exec ci-mongo mongosh --quiet --eval 'db.hello().isWritablePrimary')" = "true" ] && break; sleep 1; done
+          echo "MONGO_URL=mongodb://localhost:27017/?directConnection=true" >> "$GITHUB_ENV"
 
       # Nessun GOWORK=off: qui il workspace non c'è proprio. È il punto — questa build vede
       # esattamente ciò che vede un consumatore esterno che fa `go get` del modulo.
